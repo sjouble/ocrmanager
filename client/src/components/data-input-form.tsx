@@ -1,13 +1,10 @@
 import { useState, useEffect } from "react";
-import { Camera, List, Edit, Plus } from "lucide-react";
+import { Camera, List, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import type { PackagingUnit, InsertInventoryItem } from "@shared/schema";
+import { useLocalStorage } from "@/hooks/use-local-storage";
 
 interface DataInputFormProps {
   initialProductNumber: string;
@@ -16,6 +13,9 @@ interface DataInputFormProps {
   onViewList: () => void;
   onEditPackaging: () => void;
 }
+
+// 기본 포장단위들
+const DEFAULT_PACKAGING_UNITS = ['카톤', '중포', '낱개'];
 
 export default function DataInputForm({ 
   initialProductNumber, 
@@ -30,34 +30,7 @@ export default function DataInputForm({
   const [expirationDate, setExpirationDate] = useState('');
   
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const { data: packagingUnits = [], isLoading: packagingLoading } = useQuery<PackagingUnit[]>({
-    queryKey: ['/api/packaging-units'],
-  });
-
-  const saveItemMutation = useMutation({
-    mutationFn: async (data: InsertInventoryItem) => {
-      return apiRequest('POST', '/api/inventory', data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/inventory'] });
-      toast({
-        title: "저장 완료",
-        description: "항목이 목록에 추가되었습니다.",
-      });
-      clearForm();
-      onSave();
-    },
-    onError: (error) => {
-      toast({
-        title: "저장 실패",
-        description: "다시 시도해주세요.",
-        variant: "destructive",
-      });
-      console.error('Save error:', error);
-    },
-  });
+  const { addItem } = useLocalStorage();
 
   useEffect(() => {
     setProductNumber(initialProductNumber);
@@ -98,14 +71,16 @@ export default function DataInputForm({
       return;
     }
 
-    const itemData: InsertInventoryItem = {
-      productNumber: productNumber.trim(),
-      packagingUnit,
-      quantity: parseInt(quantity),
-      expirationDate: expirationDate || null,
-    };
-
-    saveItemMutation.mutate(itemData);
+    // 로컬 스토리지에 저장
+    addItem(productNumber);
+    
+    toast({
+      title: "저장 완료",
+      description: "품번이 목록에 추가되었습니다.",
+    });
+    
+    clearForm();
+    onSave();
   };
 
   const handleExpirationDateChange = (value: string) => {
@@ -137,26 +112,26 @@ export default function DataInputForm({
             size="sm"
             className="text-primary-blue hover:text-blue-400 p-1"
           >
-            <Edit className="w-4 h-4 mr-1" />
             편집
           </Button>
         </div>
-        <Select value={packagingUnit} onValueChange={setPackagingUnit}>
-          <SelectTrigger className="w-full bg-dark-card border-gray-600 text-white text-lg focus:border-primary-blue">
-            <SelectValue placeholder="포장단위 선택" />
-          </SelectTrigger>
-          <SelectContent className="bg-dark-card border-gray-600">
-            {packagingUnits?.map((unit: PackagingUnit) => (
-              <SelectItem 
-                key={unit.id} 
-                value={unit.name}
-                className="text-white hover:bg-gray-700"
-              >
-                {unit.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="grid grid-cols-3 gap-2">
+          {DEFAULT_PACKAGING_UNITS.map((unit) => (
+            <Button
+              key={unit}
+              type="button"
+              variant={packagingUnit === unit ? "default" : "outline"}
+              onClick={() => setPackagingUnit(unit)}
+              className={`w-full ${
+                packagingUnit === unit 
+                  ? 'bg-primary-blue text-white' 
+                  : 'bg-dark-card border-gray-600 text-white hover:bg-gray-600'
+              }`}
+            >
+              {unit}
+            </Button>
+          ))}
+        </div>
       </div>
       
       {/* Quantity */}
@@ -189,27 +164,28 @@ export default function DataInputForm({
       <div className="space-y-3 pt-4">
         <Button 
           onClick={handleSave}
-          disabled={saveItemMutation.isPending}
-          className="w-full bg-primary-blue text-white py-4 text-lg font-medium hover:bg-blue-600 disabled:opacity-50"
+          className="w-full bg-primary-blue text-white py-4 text-lg font-medium hover:bg-blue-600"
         >
           <Plus className="w-5 h-5 mr-2" />
-          {saveItemMutation.isPending ? '저장 중...' : '목록에 추가'}
+          목록에 추가
         </Button>
         
         <div className="flex gap-3">
           <Button 
             onClick={onAddMore}
             variant="outline"
-            className="flex-1 bg-dark-card text-white border-gray-600 py-3 font-medium hover:bg-gray-600"
+            className="flex-1 bg-dark-card hover:bg-gray-600 text-white border-gray-600 py-4 text-lg font-medium"
           >
-            <Camera className="w-4 h-4 mr-2" />
-            추가 입력
+            <Camera className="w-5 h-5 mr-2" />
+            더 추가
           </Button>
+          
           <Button 
             onClick={onViewList}
-            className="flex-1 bg-green-700 text-white py-3 font-medium hover:bg-green-600"
+            variant="outline"
+            className="flex-1 bg-dark-card hover:bg-gray-600 text-white border-gray-600 py-4 text-lg font-medium"
           >
-            <List className="w-4 h-4 mr-2" />
+            <List className="w-5 h-5 mr-2" />
             목록 보기
           </Button>
         </div>

@@ -1,77 +1,31 @@
 import { useState } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
-import type { PackagingUnit, InsertPackagingUnit } from "@shared/schema";
 
 interface PackagingUnitsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+// 기본 포장단위들
+const DEFAULT_UNITS = ['카톤', '중포', '낱개'];
+
 export default function PackagingUnitsModal({ open, onOpenChange }: PackagingUnitsModalProps) {
-  const [newUnitName, setNewUnitName] = useState('');
+  const [units, setUnits] = useState<string[]>(DEFAULT_UNITS);
+  const [newUnit, setNewUnit] = useState("");
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const { data: packagingUnits = [], isLoading } = useQuery<PackagingUnit[]>({
-    queryKey: ['/api/packaging-units'],
-    enabled: open,
-  });
-
-  const addUnitMutation = useMutation({
-    mutationFn: async (data: InsertPackagingUnit) => {
-      return apiRequest('POST', '/api/packaging-units', data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/packaging-units'] });
-      setNewUnitName('');
-      toast({
-        title: "추가 완료",
-        description: "새 포장단위가 추가되었습니다.",
-      });
-    },
-    onError: (error: any) => {
-      const message = error?.message?.includes('unique') 
-        ? '이미 존재하는 포장단위입니다.' 
-        : '포장단위 추가에 실패했습니다.';
-      
-      toast({
-        title: "추가 실패",
-        description: message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const deleteUnitMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return apiRequest('DELETE', `/api/packaging-units/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/packaging-units'] });
-      toast({
-        title: "삭제 완료",
-        description: "포장단위가 삭제되었습니다.",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "삭제 실패",
-        description: "다시 시도해주세요.",
-        variant: "destructive",
-      });
-    },
-  });
 
   const handleAddUnit = () => {
-    const trimmedName = newUnitName.trim();
-    
-    if (!trimmedName) {
+    if (!newUnit.trim()) {
       toast({
         title: "입력 오류",
         description: "포장단위명을 입력해주세요.",
@@ -80,104 +34,120 @@ export default function PackagingUnitsModal({ open, onOpenChange }: PackagingUni
       return;
     }
 
-    if (trimmedName.length > 20) {
+    if (units.includes(newUnit.trim())) {
       toast({
-        title: "입력 오류",
-        description: "포장단위명은 20자 이내로 입력해주세요.",
+        title: "중복 오류",
+        description: "이미 존재하는 포장단위입니다.",
         variant: "destructive",
       });
       return;
     }
 
-    addUnitMutation.mutate({ name: trimmedName });
+    setUnits([...units, newUnit.trim()]);
+    setNewUnit("");
+    toast({
+      title: "추가 완료",
+      description: "새 포장단위가 추가되었습니다.",
+    });
   };
 
-  const handleDeleteUnit = (id: number, name: string) => {
-    if (confirm(`'${name}' 포장단위를 삭제하시겠습니까?`)) {
-      deleteUnitMutation.mutate(id);
+  const handleRemoveUnit = (unitToRemove: string) => {
+    if (DEFAULT_UNITS.includes(unitToRemove)) {
+      toast({
+        title: "삭제 불가",
+        description: "기본 포장단위는 삭제할 수 없습니다.",
+        variant: "destructive",
+      });
+      return;
     }
+
+    setUnits(units.filter(unit => unit !== unitToRemove));
+    toast({
+      title: "삭제 완료",
+      description: "포장단위가 삭제되었습니다.",
+    });
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleAddUnit();
-    }
+  const handleReset = () => {
+    setUnits(DEFAULT_UNITS);
+    toast({
+      title: "초기화 완료",
+      description: "기본 포장단위로 초기화되었습니다.",
+    });
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-dark-surface border-gray-600 text-white max-w-sm mx-auto">
+      <DialogContent className="bg-dark-surface border-gray-600 text-white max-w-md">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-bold">포장단위 관리</DialogTitle>
-            <Button
-              onClick={() => onOpenChange(false)}
-              variant="ghost"
-              size="sm"
-              className="text-text-secondary hover:text-white p-2"
-            >
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
+          <DialogTitle className="text-xl font-bold">포장단위 설정</DialogTitle>
         </DialogHeader>
-
-        <div className="space-y-6">
+        
+        <div className="space-y-4">
           {/* Add new unit */}
-          <div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-text-secondary">
+              새 포장단위 추가
+            </Label>
             <div className="flex gap-2">
               <Input
-                value={newUnitName}
-                onChange={(e) => setNewUnitName(e.target.value)}
-                onKeyPress={handleKeyPress}
-                className="flex-1 bg-dark-card border-gray-600 text-white focus:border-primary-blue"
-                placeholder="새 포장단위 입력"
-                maxLength={20}
+                value={newUnit}
+                onChange={(e) => setNewUnit(e.target.value)}
+                placeholder="포장단위명 입력"
+                className="flex-1 bg-dark-card border-gray-600 text-white"
+                onKeyPress={(e) => e.key === 'Enter' && handleAddUnit()}
               />
               <Button
                 onClick={handleAddUnit}
-                disabled={addUnitMutation.isPending}
-                className="bg-primary-blue text-white px-4 hover:bg-blue-600 disabled:opacity-50"
+                className="bg-primary-blue hover:bg-blue-600 text-white"
               >
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
           </div>
 
-          {/* Existing units */}
-          <div>
-            <h4 className="text-text-secondary font-medium mb-3">기존 포장단위</h4>
-            
-            {isLoading ? (
-              <div className="text-center py-4">
-                <div className="w-6 h-6 border-2 border-primary-blue border-t-transparent rounded-full animate-spin mx-auto"></div>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {packagingUnits && packagingUnits.length > 0 ? (
-                  packagingUnits.map((unit: PackagingUnit) => (
-                    <div
-                      key={unit.id}
-                      className="flex items-center justify-between bg-dark-card p-3 rounded-lg"
+          {/* Units list */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium text-text-secondary">
+              포장단위 목록
+            </Label>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {units.map((unit) => (
+                <div
+                  key={unit}
+                  className="flex items-center justify-between p-3 bg-dark-card rounded-lg border border-gray-600"
+                >
+                  <span className="text-white">{unit}</span>
+                  {!DEFAULT_UNITS.includes(unit) && (
+                    <Button
+                      onClick={() => handleRemoveUnit(unit)}
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
                     >
-                      <span className="text-white">{unit.name}</span>
-                      <Button
-                        onClick={() => handleDeleteUnit(unit.id, unit.name)}
-                        disabled={deleteUnitMutation.isPending}
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-400 hover:text-red-300 hover:bg-red-900/20 p-2"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-4">
-                    <p className="text-text-secondary">포장단위가 없습니다.</p>
-                  </div>
-                )}
-              </div>
-            )}
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2 pt-4">
+            <Button
+              onClick={handleReset}
+              variant="outline"
+              className="flex-1 bg-dark-card hover:bg-gray-600 text-white border-gray-600"
+            >
+              기본값으로 초기화
+            </Button>
+            <Button
+              onClick={() => onOpenChange(false)}
+              className="flex-1 bg-primary-blue hover:bg-blue-600 text-white"
+            >
+              확인
+            </Button>
           </div>
         </div>
       </DialogContent>

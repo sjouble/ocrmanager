@@ -23,6 +23,11 @@ export class CameraManager {
 
   async requestCameraAccess(constraints?: CameraConstraints): Promise<MediaStream> {
     try {
+      // HTTPS 체크 (localhost는 예외)
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !location.hostname.includes('127.0.0.1')) {
+        throw new Error('카메라 접근을 위해서는 HTTPS가 필요합니다. 현재 HTTP로 접속 중입니다.');
+      }
+
       const defaultConstraints = await this.getDefaultConstraints();
       const finalConstraints = constraints || defaultConstraints;
       
@@ -41,6 +46,8 @@ export class CameraManager {
             throw new Error('카메라에 접근할 수 없습니다. 다른 앱에서 사용 중일 수 있습니다.');
           case 'OverconstrainedError':
             throw new Error('카메라가 요청된 설정을 지원하지 않습니다.');
+          case 'NotSupportedError':
+            throw new Error('브라우저에서 카메라를 지원하지 않습니다.');
           default:
             throw new Error('카메라 접근 중 오류가 발생했습니다.');
         }
@@ -93,6 +100,11 @@ export class CameraManager {
   }
 
   async checkCameraSupport(): Promise<boolean> {
+    // HTTPS 체크 (localhost는 예외)
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && !location.hostname.includes('127.0.0.1')) {
+      return false;
+    }
+    
     return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
   }
 
